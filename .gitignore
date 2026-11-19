@@ -1,0 +1,16 @@
+.local/
+.venv/
+.runtime/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+*.log
+*.dump
+*.key
+*.pem
+playwright-report/
+test-results/
