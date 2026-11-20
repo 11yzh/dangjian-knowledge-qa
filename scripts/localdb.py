@@ -6,6 +6,7 @@ import secrets
 import shutil
 import subprocess
 import hashlib
+import tempfile
 import zipfile
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -53,18 +54,32 @@ def ensure():
     home = pg_home()
     home.mkdir(parents=True, exist_ok=True)
     archive = STATE / "postgres-binaries.zip"
+    packaged = ROOT / ".runtime" / "pgsql"
+    installed = home / "pgsql"
     if (
         os.name == "nt"
-        and archive.is_file()
-        and not (home / "pgsql/bin/postgres.exe").exists()
+        and not (installed / "bin/postgres.exe").is_file()
+        and (packaged.is_dir() or archive.is_file())
     ):
-        with zipfile.ZipFile(archive) as z:
-            items = [
-                n
-                for n in z.namelist()
-                if n.startswith(("pgsql/bin/", "pgsql/lib/", "pgsql/share/"))
-            ]
-            z.extractall(home, items)
+        # initdb expands its share directory into SQL. A multibyte checkout path can
+        # be encoded using the Windows ANSI code page during UTF-8 initialization.
+        with tempfile.TemporaryDirectory(prefix="pg-install-", dir=home) as staging:
+            prepared = Path(staging) / "pgsql"
+            if packaged.is_dir():
+                shutil.copytree(packaged, prepared)
+            else:
+                with zipfile.ZipFile(archive) as z:
+                    items = [
+                        n
+                        for n in z.namelist()
+                        if n.startswith(("pgsql/bin/", "pgsql/lib/", "pgsql/share/"))
+                    ]
+                    z.extractall(staging, items)
+            try:
+                prepared.rename(installed)
+            except FileExistsError:
+                if not (installed / "bin/postgres.exe").is_file():
+                    raise
     config = STATE / "database.json"
     if os.getenv("DATABASE_URL") and os.getenv("DANGJIAN_OWNER_URL"):
         command.upgrade(Config(str(ROOT / "alembic.ini")), "head")

@@ -3,7 +3,6 @@ chcp 65001 >nul
 setlocal
 cd /d "%~dp0"
 if exist ".runtime\python\python.exe" (
-    set "PGBIN=%~dp0.runtime\pgsql\bin"
     ".runtime\python\python.exe" -m scripts.launch
 ) else (
     powershell -NoProfile -File "%~dp0scripts\start.ps1"

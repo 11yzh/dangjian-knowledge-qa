@@ -35,7 +35,7 @@ python -m venv .venv
 
 `.local` 保存原文、凭据、演示账号、备份、日志及测试证据。Windows 上模型凭据使用当前用户的 DPAPI 加密。Git 排除本机运行状态、虚拟环境及密钥文件。备份含账户数据、历史记录和加密凭据，应当只在本地受控保存。迁移至其他 Windows 用户时需重新配置模型凭据。
 
-在源代码根目录用项目解释器执行以下维护命令。运行包将命令中的 Python 路径替换为 `.runtime\python\python.exe`；使用运行包维护命令前可设置 `$env:PGBIN = (Resolve-Path .runtime\pgsql\bin).Path`。
+在源代码根目录用项目解释器执行以下维护命令。运行包将命令中的 Python 路径替换为 `.runtime\python\python.exe`。Windows 首次启动会把数据库工具复制到当前用户的本地应用数据目录。若 Windows 配置文件的路径包含非 ASCII 字符且初始化出现编码错误，可将 `DANGJIAN_PG_HOME` 设为当前用户可写的英文路径后重新启动。
 
 ```powershell
 .venv\Scripts\python.exe -m scripts.maintenance backup

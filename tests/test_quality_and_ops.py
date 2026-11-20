@@ -40,6 +40,17 @@ def test_tc27_rule_modes(s):
     assert (
         sqlread("SELECT count(*) AS n FROM audit_log WHERE action='规则命中'")["n"] >= 3
     )
+    observed = add_rule(s, pattern="工作日", action="LOG")
+    reply = s.ask()
+    assert status(reply) == "SUCCESS"
+    assert (
+        sqlread(
+            "SELECT count(*) AS n FROM audit_log WHERE request_id=:request AND target=:t AND summary LIKE '模型输出 · LOG%'",
+            request=reply.json()["request_id"],
+            t=observed["rule_id"],
+        )["n"]
+        == 1
+    )
 
 
 def test_tc28_disabled_allowlist(s):

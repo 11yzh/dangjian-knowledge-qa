@@ -137,7 +137,7 @@ def screen(value, rules):
     return any(x[2] == "BLOCK" for x in found_rules), "".join(masked), found_rules
 
 
-def verify(candidate, evidence, rules):
+def verify(candidate, evidence, rules, output_hits):
     if not isinstance(candidate, dict) or not isinstance(candidate.get("points"), list):
         return "SERVICE_ERROR", "MODEL_FORMAT", []
     mode = candidate.get("mode")
@@ -152,6 +152,10 @@ def verify(candidate, evidence, rules):
     for point in candidate["points"]:
         if not isinstance(point, dict) or not isinstance(point.get("quote"), str):
             return "SERVICE_ERROR", "MODEL_FORMAT", []
+        blocked, _, hits = screen(point["quote"], rules)
+        output_hits.update(hits)
+        if blocked:
+            return "REFUSED", "OUTPUT_RULE", []
         src = evidence.get(point.get("evidence_id"))
         if not src:
             return "REFUSED", "INVALID_CITATION", []

@@ -154,14 +154,28 @@ def history(db, sid, role, rounds):
     )
 
 
+def record_hits(db, user_id, key, stage, hits):
+    for rule_id, revision, action in sorted(set(hits)):
+        audit(
+            db,
+            user_id,
+            "规则命中",
+            rule_id,
+            summary=f"{stage} · {action} · V{revision}",
+            rid=key,
+        )
+
+
 def prompt_data(q, rows, past, rules, config):
     budget = int(config["context_budget"])
     # UTF-8 bytes give a conservative upper bound for byte-level model tokens.
     left = budget - len((model.PROMPT + q).encode()) - 80
     evidence = {}
+    rule_hits = set()
     trimmed = False
     for row in rows:
-        blocked, body, _ = screen(row["content"], rules)
+        blocked, body, hits = screen(row["content"], rules)
+        rule_hits.update(hits)
         if blocked:
             continue
         label = "E" + str(len(evidence) + 1)
@@ -179,7 +193,8 @@ def prompt_data(q, rows, past, rules, config):
         left -= cost
     short = []
     for turn in past:
-        blocked, clean, _ = screen(turn["question"], rules)
+        blocked, clean, hits = screen(turn["question"], rules)
+        rule_hits.update(hits)
         if blocked:
             continue
         item = {"question": clean, "subject": turn["title"]}
@@ -197,6 +212,7 @@ def prompt_data(q, rows, past, rules, config):
             "evidence": [r["input"] for r in evidence.values()],
         },
         trimmed,
+        rule_hits,
     )
 
 
@@ -365,8 +381,7 @@ async def ask(req: Request, sid: str, data: dict):
         )
         rules = active_rules(db)
         blocked, clean, hits = screen(q, rules)
-        for rid, rev, act in hits:
-            audit(db, u["user_id"], "规则命中", rid, summary=f"{act} · V{rev}", rid=key)
+        record_hits(db, u["user_id"], key, "输入", hits)
         if blocked:
             q = "〔已拦截的问题〕"
             status, reason = "REFUSED", "INPUT_RULE"
@@ -391,12 +406,16 @@ async def ask(req: Request, sid: str, data: dict):
             )
             if rows:
                 topic = rows[0]["category"]
-            evidence, payload, budget_trim = prompt_data(clean, rows, past, rules, cfg)
+            evidence, payload, budget_trim, evidence_hits = prompt_data(
+                clean, rows, past, rules, cfg
+            )
+            record_hits(db, u["user_id"], key, "模型上下文", evidence_hits)
             trimmed = trimmed or budget_trim
             status, reason = (
                 ("PENDING", "") if evidence else ("NO_EVIDENCE", "NO_VISIBLE_MATCH")
             )
             q = clean
+    output_hits = set()
     if status == "PENDING":
         try:
             remaining = timeout - (time.monotonic() - started) - 0.22
@@ -404,7 +423,7 @@ async def ask(req: Request, sid: str, data: dict):
                 raise model.ModelError("MODEL_TIMEOUT")
             async with asyncio.timeout(remaining):
                 candidate = await model.generate(cfg, payload, remaining)
-            status, reason, points = verify(candidate, evidence, rules)
+            status, reason, points = verify(candidate, evidence, rules, output_hits)
         except (model.ModelError, TimeoutError) as exc:
             status, reason = "SERVICE_ERROR", str(exc) or "MODEL_TIMEOUT"
         except Exception:
@@ -427,6 +446,7 @@ async def ask(req: Request, sid: str, data: dict):
             return response(
                 req, materialize(db, guard["result_ref"], live["current_role_id"])
             )
+        record_hits(db, u["user_id"], key, "模型输出", output_hits)
         if points:
             for doc in sorted({p["document_id"] for p in points}):
                 run(
