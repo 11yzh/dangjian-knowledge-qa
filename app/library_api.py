@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from .auth import principal
 from .core import *
 from .knowledge import (
@@ -10,6 +10,7 @@ from .knowledge import (
     file_granted,
     transition,
 )
+from .reader import reading_page
 
 routes = APIRouter()
 K = (KNOWLEDGE,)
@@ -384,8 +385,7 @@ def cite(req: Request, cid: str):
         return result(req, citation_record(db, u, cid))
 
 
-@routes.get("/versions/{vid}/file")
-def original(req: Request, vid: str, citation_id: str | None = None):
+def original_access(req, vid, citation_id):
     with engine().begin() as db:
         u = principal(db, req)
         v = found(
@@ -395,6 +395,7 @@ def original(req: Request, vid: str, citation_id: str | None = None):
                 v=uid(vid),
             )
         )
+        c = None
         if citation_id:
             c = citation_record(db, u, citation_id)
             require(
@@ -416,14 +417,50 @@ def original(req: Request, vid: str, citation_id: str | None = None):
             )
         file = file_for(v["file_path"])
         found(True if file.is_file() else None)
-        media = {
-            "PDF": "application/pdf",
-            "DOCX": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "TXT": "text/plain; charset=utf-8",
-        }
-        return FileResponse(
-            file,
-            media_type=media[v["file_type"]],
-            filename=v["title"] + "." + v["file_type"].lower(),
-            content_disposition_type="inline",
-        )
+        return v, file, c
+
+
+@routes.get("/versions/{vid}/file")
+def original(req: Request, vid: str, citation_id: str | None = None):
+    v, file, _ = original_access(req, vid, citation_id)
+    media = {
+        "PDF": "application/pdf",
+        "DOCX": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "TXT": "text/plain; charset=utf-8",
+    }
+    return FileResponse(
+        file,
+        media_type=media[v["file_type"]],
+        filename=v["title"] + "." + v["file_type"].lower(),
+        content_disposition_type="inline",
+    )
+
+
+@routes.get("/versions/{vid}/preview", response_class=HTMLResponse)
+def preview(
+    req: Request, vid: str, citation_id: str | None = None, page: int | None = None
+):
+    status = 200
+    try:
+        v, file, citation = original_access(req, vid, citation_id)
+        locator = citation["locator"] if citation else ""
+        try:
+            content = reading_page(
+                file,
+                v["file_type"],
+                page,
+                locator,
+                citation["snippet"] if citation else "",
+            )
+        except Problem:
+            raise
+        except Exception:
+            raise Problem(
+                "原文件暂时无法解析，请联系知识管理员核对该版本。", 422
+            ) from None
+        context = dict(version=v, locator=locator, citation_id=citation_id, **content)
+    except Problem as err:
+        status, context = err.status, {"error": err.message}
+    return req.app.state.templates.TemplateResponse(
+        request=req, name="reader.html", context=context, status_code=status
+    )

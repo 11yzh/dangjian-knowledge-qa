@@ -20,6 +20,7 @@ app = FastAPI(
 for module in (auth, chat, library_api, operations):
     app.include_router(module.routes, prefix="/api/v1")
 templates = Jinja2Templates(directory=str(ROOT / "app/templates"))
+app.state.templates = templates
 app.mount("/static", StaticFiles(directory=str(ROOT / "app/static")), name="static")
 
 

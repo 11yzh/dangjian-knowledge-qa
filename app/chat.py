@@ -111,17 +111,33 @@ def remove(req: Request, sid: str, confirm: bool = False):
 
 
 @routes.get("/sessions/{sid}/messages")
-def messages(req: Request, sid: str):
+def messages(req: Request, sid: str, request_id: str | None = None):
     with engine().begin() as db:
         u = principal(db, req)
-        owned(db, u["user_id"], sid)
+        session = owned(db, u["user_id"], sid)
+        query = "SELECT message_id,speaker,status,content,created_at,request_id FROM message WHERE session_id=:s"
+        args = {"s": sid}
+        if request_id:
+            args["key"] = uid(request_id)
+            query += " AND request_id=:key"
         data = page(
             db,
-            "SELECT message_id,speaker,status,content,created_at,request_id FROM message WHERE session_id=:s",
-            {"s": sid},
+            query,
+            args,
             req,
             "created_at,CASE speaker WHEN 'USER' THEN 0 ELSE 1 END,message_id",
         )
+        data["session_title"] = session["title"]
+        if request_id:
+            data["request_state"] = run(
+                db,
+                """SELECT CASE WHEN state='RUNNING' AND deadline_at < now() - interval '5 seconds'
+                THEN 'EXPIRED' ELSE state END FROM request_guard WHERE session_id=:s AND request_id=:key
+                AND role_id=:role AND actor_id=:actor""",
+                **args,
+                role=u["current_role_id"],
+                actor=u["user_id"],
+            ).scalar_one_or_none()
         for item in data["items"]:
             if item["speaker"] == "ASSISTANT":
                 item["citations"] = citations(

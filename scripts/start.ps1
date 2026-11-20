@@ -3,6 +3,9 @@ Set-Location -LiteralPath (Split-Path $PSScriptRoot -Parent)
 if (-not (Test-Path -LiteralPath '.venv/Scripts/python.exe')) {
     python -m venv .venv
     if ($LASTEXITCODE -ne 0) { throw "Python virtual environment setup failed." }
+}
+& '.venv/Scripts/python.exe' -c "from importlib.util import find_spec; import sys; sys.exit(not all(find_spec(name) for name in ('fastapi', 'pypdfium2', 'PIL')))"
+if ($LASTEXITCODE -ne 0) {
     & '.venv/Scripts/python.exe' -m pip install -r requirements.txt
     if ($LASTEXITCODE -ne 0) { throw "Python dependency setup failed." }
 }

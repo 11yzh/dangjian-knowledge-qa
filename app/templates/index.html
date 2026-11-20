@@ -2,7 +2,7 @@
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, interactive-widget=resizes-content" />
     <meta name="theme-color" content="#712d32" />
     <title>党建知识问答</title>
     <link
@@ -10,12 +10,13 @@
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='1' y='1' width='30' height='30' rx='6' fill='%23712830'/%3E%3Cpath d='M7 9q5-1 9 2 4-3 9-2v13q-5-1-9 2-4-3-9-2z' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="/static/styles.css" />
-    <script src="/static/app.js" defer></script>
-    <script src="/static/manage.js" defer></script>
+    <link rel="stylesheet" href="/static/styles.css?v=chat-reader" />
+    <script src="/static/chat.js?v=chat-reader" defer></script>
+    <script src="/static/app.js?v=chat-reader" defer></script>
+    <script src="/static/manage.js?v=chat-reader" defer></script>
   </head>
   <body>
-    <div id="root"><main class="loading">正在打开党建知识问答…</main></div>
+    <div id="root"><main class="loading" role="status">正在打开党建知识问答…</main></div>
     <div id="notice" role="status" aria-live="polite"></div>
     <dialog id="dialog" aria-labelledby="dialog-heading">
       <div id="dialog-inside"></div>

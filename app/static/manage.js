@@ -76,7 +76,7 @@ async function showChunks(v) {
       ["资料", v.title + " · V" + v.version_no],
       ["原文 SHA-256", v.sha256],
     ]) +
-      `<a href="/api/v1/versions/${esc(v.version_id)}/file" target="_blank" rel="noopener">打开原文件</a>` +
+      `<a href="/api/v1/versions/${esc(v.version_id)}/preview" target="_blank" rel="noopener">打开原文件</a>` +
       data
         .map(
           (c) =>

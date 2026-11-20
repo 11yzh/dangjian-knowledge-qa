@@ -4,11 +4,14 @@ import re
 import unicodedata
 import zipfile
 from datetime import date
+from itertools import chain
 from pathlib import Path
+from typing import NamedTuple
 from uuid import uuid4
 
 import jieba
 from docx import Document
+from docx.table import Table
 from pypdf import PdfReader
 from sqlalchemy import event
 from sqlalchemy.engine import Engine
@@ -137,6 +140,38 @@ def validate_file(filename, raw):
     return kind
 
 
+class SourceBlock(NamedTuple):
+    kind: str
+    locator: str
+    text: str
+    cells: tuple = ()
+    table: int = 0
+
+
+def word_blocks(elements):
+    heading = ""
+    paragraph_no = table_no = 0
+    for item in elements:
+        if isinstance(item, Table):
+            table_no += 1
+            for n, row in enumerate(item.rows, 1):
+                cells = tuple(cell.text for cell in row.cells)
+                yield SourceBlock(
+                    "row", f"表 {table_no} 第 {n} 行", " ".join(cells), cells, table_no
+                )
+            continue
+        value = item.text.strip()
+        if not value:
+            continue
+        if item.style and item.style.name.startswith(("Heading", "标题", "Title")):
+            heading, paragraph_no = value[:100], 0
+            yield SourceBlock("heading", "", value)
+            continue
+        paragraph_no += 1
+        locator = (heading + " · " if heading else "") + f"第 {paragraph_no} 段"
+        yield SourceBlock("paragraph", locator, value)
+
+
 def parse(raw, kind):
     if kind == "PDF":
         doc = PdfReader(io.BytesIO(raw))
@@ -155,23 +190,10 @@ def parse(raw, kind):
                 yield f"第 {i} 页", piece
     elif kind == "DOCX":
         doc = Document(io.BytesIO(raw))
-        heading = ""
-        n = 0
-        for paragraph in doc.paragraphs:
-            content = paragraph.text.strip()
-            if not content:
-                continue
-            if paragraph.style.name.startswith(("Heading", "标题", "Title")):
-                heading = content[:100]
-                n = 0
-                continue
-            n += 1
-            for piece in windows(content):
-                yield (heading + " · " if heading else "") + f"第 {n} 段", piece
-        for i, table in enumerate(doc.tables, 1):
-            for j, row in enumerate(table.rows, 1):
-                for piece in windows(" ".join(c.text for c in row.cells)):
-                    yield f"表 {i} 第 {j} 行", piece
+        for block in word_blocks(chain(doc.paragraphs, doc.tables)):
+            if block.kind != "heading":
+                for piece in windows(block.text):
+                    yield block.locator, piece
     else:
         for i, line in enumerate(raw.decode("utf-8-sig").splitlines(), 1):
             for piece in windows(line.strip()):

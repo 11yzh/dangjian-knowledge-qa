@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ version.title if version else '原文预览' }} · 党建知识问答</title>
+  <link rel="stylesheet" href="/static/styles.css?v=chat-reader">
+</head>
+<body class="reader">
+  <header class="reader-bar"><span class="brand"><span class="mark" aria-hidden="true">章</span>党建知识问答</span><span>原文阅读</span></header>
+  <main class="reader-main">
+    {% if error %}
+      <h1>无法打开原文</h1><p>{{ error }}</p><a href="/">返回系统</a>
+    {% else %}
+      {% macro url(n) %}?page={{ n }}{% if citation_id %}&amp;citation_id={{ citation_id }}{% endif %}{% endmacro %}
+      <header class="reader-title">
+        <h1>{{ version.title }}</h1>
+        <p>{{ version.file_type }} · 版本 {{ version.version_no }}{% if locator %} · 引用位置：{{ locator }}{% endif %}</p>
+      </header>
+      <nav class="reader-nav" aria-label="原文翻页">
+        {% if number > 1 %}<a href="{{ url(number-1) }}">上一页</a>{% else %}<span aria-disabled="true">上一页</span>{% endif %}
+        <form method="get">
+          {% if citation_id %}<input type="hidden" name="citation_id" value="{{ citation_id }}">{% endif %}
+          <label>第 <input type="number" name="page" aria-label="页码" min="1" max="{{ total }}" value="{{ number }}" required> / {{ total }} 页</label>
+          <button type="submit">跳转</button>
+        </form>
+        {% if number < total %}<a href="{{ url(number+1) }}">下一页</a>{% else %}<span aria-disabled="true">下一页</span>{% endif %}
+      </nav>
+      {% if image %}
+        <figure class="reader-sheet"><img src="data:image/png;base64,{{ image }}" alt="{{ version.title }}原版第 {{ number }} 页"></figure>
+        {% if text %}<details class="reader-transcript"><summary>本页文字</summary><p>{{ text }}</p></details>{% endif %}
+      {% else %}
+        <article class="reader-paper" aria-label="原文正文">
+          {% for block in blocks %}
+            {% set target = loop.index == target_row %}
+            {% if block.kind == 'row' %}
+              {% if loop.first or loop.previtem.table != block.table %}<div class="table-wrap"><table><caption>表 {{ block.table }}</caption><tbody>{% endif %}
+              <tr{% if target %} id="cited" class="reader-target"{% endif %}>{% for cell in block.cells %}<td>{{ cell }}</td>{% endfor %}</tr>
+              {% if loop.last or loop.nextitem.table != block.table %}</tbody></table></div>{% endif %}
+            {% elif block.kind == 'heading' %}
+              <h2>{{ block.text }}</h2>
+            {% else %}
+              <p{% if target %} id="cited" class="reader-target"{% endif %}>{% if block.kind == 'line' %}<span class="reader-line">{{ block.locator }}</span>{% endif %}{{ block.text }}</p>
+            {% endif %}
+          {% endfor %}
+        </article>
+      {% endif %}
+    {% endif %}
+  </main>
+</body>
+</html>

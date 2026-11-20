@@ -474,9 +474,10 @@ def test_tc39_permissions_and_csrf(s):
 def test_tc40_keyboard_controls(s):
     # Full keyboard and viewport runs on the running instance are recorded by browser_check.
     c = s.client("U1")
-    assert c.get("/").is_success
-    js = c.get("/static/app.js").text
-    assert "aria-label" in js and "输入问题" in js and "确认删除" in js
+    home = c.get("/")
+    assert home.is_success and "/static/chat.js" in home.text
+    assert 'aria-label="输入问题"' in c.get("/static/chat.js").text
+    assert "确认删除" in c.get("/static/app.js").text
     assert "focus-visible" in c.get("/static/styles.css").text
 
 

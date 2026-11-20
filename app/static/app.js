@@ -11,15 +11,26 @@ const esc = (value) =>
 const state = {
   me: null,
   tab: "ask",
-  sid: null,
-  title: "",
-  history: [],
-  pending: false,
-  retry: null,
+  chat: null,
   filter: {},
   pages: {},
   serial: 0,
 };
+const pendingChats = new Map();
+function selectChat(sid = null, title = "", resumeKey = null) {
+  state.chat = pendingChats.get(sid) || {
+    sid, title, owner: state.me, turn: null, revision: 0, resumeKey,
+  };
+}
+function rememberChat() {
+  if (state.tab !== "ask" || !state.me) return;
+  const chat = state.chat;
+  const entry = chat?.sid ? {
+    sid: chat.sid, user: state.me.user_id, role: state.me.role_code,
+    request: chat.turn?.key || chat.resumeKey || null,
+  } : null;
+  history.replaceState(entry, "", "#ask");
+}
 const labels = {
   USER: "普通用户",
   KNOWLEDGE_ADMIN: "知识管理员",
@@ -88,6 +99,7 @@ async function api(
   path,
   { method = "GET", data, form, key, terminal = false } = {},
 ) {
+  const account = state.me;
   const headers = {};
   if (method !== "GET") {
     headers["X-CSRF-Token"] = state.me?.csrf_token || "";
@@ -106,7 +118,7 @@ async function api(
   }
   const obj = await res.json();
   if (!res.ok && !(terminal && obj.data?.status === "SERVICE_ERROR")) {
-    if (res.status === 401 && path !== "/auth/login") {
+    if (res.status === 401 && path !== "/auth/login" && state.me === account) {
       state.me = null;
       loginScreen();
     }
@@ -194,6 +206,9 @@ function list(items) {
 }
 function loginScreen() {
   acts.clear();
+  pendingChats.clear();
+  state.chat = null;
+  state.serial++;
   if ($("dialog").open) $("dialog").close();
   $("root").innerHTML =
     `<main class="login"><section class="login-story"><div class="brand"><span class="mark">章</span>党建知识问答</div><div class="story-body"><h1>党建知识<br>问答系统</h1><p>阅读党章原文，查询条文依据，保存学习记录。</p></div><div class="story-source">收录《中国共产党章程》<br>2022 年 10 月 22 日通过</div><div class="page-stack"><img alt="" src="/static/constitution-page.webp"></div></section><section class="login-entry"><h2>账号登录</h2><p class="muted">使用项目管理员分配的账号进入系统。</p><form id="login" class="formgrid">${input("username", "用户名", "", "text", 'autocomplete="username" required maxlength="64"')}${input("password", "密码", "", "password", 'autocomplete="current-password" required')}<div id="login-error" role="alert" class="errorbox"></div><button type="submit" class="primary">登录</button></form></section></main>`;
@@ -208,7 +223,7 @@ function loginScreen() {
           data: formData(e.currentTarget),
         })
       ).data;
-      state.sid = null;
+      selectChat();
       await navigate("ask");
     } catch (err) {
       $("login-error").textContent = err.message;
@@ -250,8 +265,6 @@ function allowed() {
 async function logout() {
   await post("/auth/logout");
   state.me = null;
-  state.history = [];
-  state.sid = null;
   location.hash = "";
   loginScreen();
 }
@@ -263,7 +276,10 @@ async function navigate(tab) {
   acts.clear();
   state.tab = allowed().includes(tab) ? tab : "ask";
   const ticket = ++state.serial;
-  if (location.hash.slice(1) !== state.tab)
+  if (state.tab === "ask") {
+    if (!state.chat) selectChat();
+    rememberChat();
+  } else if (location.hash.slice(1) !== state.tab)
     history.replaceState(null, "", "#" + state.tab);
   $("root").innerHTML =
     `<a class="skip" href="#main">跳到主内容</a><div class="layout"><aside class="side"><div class="brand"><span class="mark">章</span>党建知识问答</div><nav aria-label="主导航">${allowed()
@@ -280,8 +296,8 @@ async function navigate(tab) {
   if ($("role-select"))
     $("role-select").onchange = async (e) => {
       state.me = await post("/auth/role", { role_code: e.target.value }, "PUT");
-      state.sid = null;
-      state.history = [];
+      pendingChats.clear();
+      selectChat();
       await navigate("ask");
     };
   if (state.me.must_change_password) {
@@ -301,6 +317,7 @@ async function navigate(tab) {
       }[state.tab] || (() => manageView(state.tab))
     )();
     if (ticket !== state.serial) return;
+    $("main").classList.toggle("chat-content", state.tab === "ask");
     $("main").innerHTML = markup;
     if (state.tab === "ask") bindComposer();
     if ($("filters"))
@@ -315,7 +332,8 @@ async function navigate(tab) {
       $("main").innerHTML =
         head(navNames[state.tab]) +
         `<p class="error">${esc(err.message)}</p>` +
-        act("重试", () => navigate(state.tab));
+        act("重试", () => navigate(state.tab)) +
+        (state.tab === "ask" && state.chat?.sid ? act("新建会话", freshChat) : "");
   }
 }
 function passwordModal() {
@@ -338,10 +356,7 @@ function passwordModal() {
   );
 }
 const freshChat = () => {
-  state.sid = null;
-  state.history = [];
-  state.retry = null;
-  state.title = "";
+  selectChat();
   return navigate("ask");
 };
 function filterBar(fields) {
@@ -387,8 +402,7 @@ async function historyView() {
         r.title,
         dt(r.updated_at),
         act("打开", () => {
-          state.sid = r.session_id;
-          state.title = r.title;
+          selectChat(r.session_id, r.title);
           return navigate("ask");
         }) +
           act("改名", () =>
@@ -416,7 +430,7 @@ async function historyView() {
                 await api("/sessions/" + r.session_id + "?confirm=true", {
                   method: "DELETE",
                 });
-                if (state.sid === r.session_id) state.sid = null;
+                if (state.chat?.sid === r.session_id) selectChat();
                 await navigate("history");
               },
             ),
@@ -457,7 +471,7 @@ async function libraryView() {
                 (r.valid_from || "未标注") + " 至 " + (r.valid_to || "未标注"),
               ],
             ]) +
-              `<a target="_blank" rel="noopener" href="/api/v1/versions/${esc(r.version_id)}/file">打开原文</a>` +
+              `<a target="_blank" rel="noopener" href="/api/v1/versions/${esc(r.version_id)}/preview">打开原文</a>` +
               (r.source_url
                 ? `　<a target="_blank" rel="noopener" href="${esc(r.source_url)}">来源网站</a>`
                 : ""),
@@ -511,7 +525,6 @@ async function feedbackView() {
 async function cite(id) {
   const c = await get("/citations/" + id),
     s = c.source;
-  const pdf = s.title && c.locator.match(/第\s*(\d+)\s*页/);
   modal(
     "引用原文",
     `<h3>${esc(s.title)}</h3><blockquote>${esc(c.snippet)}</blockquote>` +
@@ -526,7 +539,7 @@ async function cite(id) {
           (s.valid_from || "未标注") + " 至 " + (s.valid_to || "未标注"),
         ],
       ]) +
-      `<a target="_blank" rel="noopener" href="/api/v1/versions/${esc(c.version_id)}/file?citation_id=${esc(id)}${pdf ? "#page=" + pdf[1] : ""}">打开此版本原文</a>`,
+      `<a target="_blank" rel="noopener" href="/api/v1/versions/${esc(c.version_id)}/preview?citation_id=${esc(id)}#cited">打开此版本原文</a>`,
   );
 }
 function feedbackModal(mid) {
@@ -545,128 +558,15 @@ function feedbackModal(mid) {
     "提交反馈",
   );
 }
-function message(r) {
-  if (r.speaker === "USER")
-    return `<article class="message user"><div class="pre">${esc(r.content)}</div></article>`;
-  return `<article class="message"><h3>${esc(lab(r.status))}</h3><div class="answer">${esc(r.content)}</div><div class="citations">${(r.citations || []).map((c) => act("〔" + c.order_no + "〕" + c.source.title + " · V" + c.source.version_no + " · " + c.locator, () => cite(c.citation_id))).join("")}</div><div class="actions compact"><small>${dt(r.created_at)}</small>${r.message_id ? act("评价与纠错", () => feedbackModal(r.message_id), "link") : ""}</div></article>`;
-}
-async function chatView() {
-  let faqs = [],
-    filters;
-  if (!state.sid) {
-    [faqs, filters] = await Promise.all([
-      get("/faqs?page_size=3").then((x) => x.items),
-      get("/knowledge/filters"),
-    ]);
-    state.history = [];
-  } else {
-    let all = [],
-      n = 1,
-      pack;
-    do {
-      pack = await get(
-        "/sessions/" + state.sid + "/messages?page_size=100&page=" + n++,
-      );
-      all.push(...pack.items);
-    } while (all.length < pack.total);
-    state.history = all;
-    filters = await get("/knowledge/filters");
-  }
-  return (
-    head(
-      state.sid ? state.title || "学习会话" : "知识问答",
-      state.sid ? act("新建会话", freshChat) : "",
-    ) +
-    (!state.history.length
-      ? `<div class="chat-home"><h2>今天想了解哪条规定？</h2><p>输入问题后，可从答复中的引用查看对应条文。</p><div class="featured"><div><small>收录原文</small><b>中国共产党章程</b><small>共产党员网 · 2022 年 10 月 22 日通过</small></div><img class="thumb" src="/static/constitution-page.webp" alt="中国共产党章程原文首页"></div><div class="topic-list">${faqs.map((f) => act(f.title, () => startQuestion(f.question, f.faq_id))).join("")}</div></div>`
-      : `<div class="messages">${state.history.map(message).join("")}</div>`) +
-    `<form id="composer" class="composer">
-      <textarea id="question" aria-label="输入问题" aria-keyshortcuts="Control+Enter" rows="2" maxlength="2000" placeholder="输入问题，例如：预备党员的预备期为多长时间？" required>${esc(state.retry?.question || "")}</textarea>
-      <div id="chat-progress" class="help" role="status"></div>
-      <div class="controls">
-        <div class="actions">
-          <select aria-label="限定资料分类" id="chat-cat">
-            <option value="">全部分类</option>${options(filters.categories, "category_id", "name", "")}
-          </select>
-          <label><input id="reset-topic" type="checkbox">切换话题</label>
-        </div>
-        <div class="composer-submit">
-          <small class="composer-shortcut">Ctrl + Enter</small>
-          <button type="submit" class="primary" id="send">发送问题</button>
-        </div>
-      </div>
-    </form>`
-  );
-}
-function bindComposer() {
-  const f = $("composer");
-  if (!f) return;
-  f.onsubmit = (e) => {
-    e.preventDefault();
-    submitQuestion($("question").value.trim(), null).catch(showError);
-  };
-  $("question").onkeydown = (e) => {
-    if (e.ctrlKey && e.key === "Enter") {
-      e.preventDefault();
-      f.requestSubmit();
-    }
-  };
-}
-async function startQuestion(q, fid) {
-  if (state.tab !== "ask") {
-    state.sid = null;
-    await navigate("ask");
-  }
-  if ($("question")) $("question").value = q;
-  await submitQuestion(q, fid);
-}
-async function submitQuestion(q, fid) {
-  if (!q || state.pending) return;
-  state.pending = true;
-  const send = $("send"),
-    progress = $("chat-progress");
-  if (send) send.disabled = true;
-  if (progress) progress.textContent = "正在检索已发布资料并核对引用…";
-  try {
-    if (!state.sid) {
-      const s = await post("/sessions", {});
-      state.sid = s.session_id;
-      state.title = q.slice(0, 36);
-    }
-    const payload = {
-      ...(fid ? { faq_id: fid } : { question: q }),
-      category_id: $("chat-cat")?.value || null,
-      reset_context: Boolean($("reset-topic")?.checked),
-    };
-    const sig = JSON.stringify([state.sid, payload]);
-    const key =
-      state.retry?.sig === sig ? state.retry.key : crypto.randomUUID();
-    state.retry = { question: q, sig, key };
-    const opts = { method: "POST", data: payload, key, terminal: true };
-    let resp = await api("/sessions/" + state.sid + "/questions", opts);
-    while (resp.code === "REQUEST_RUNNING") {
-      await new Promise((r) => setTimeout(r, 800));
-      resp = await api("/sessions/" + state.sid + "/questions", opts);
-    }
-    state.retry = null;
-    await navigate("ask");
-    if (resp.data?.context_truncated) say("本轮上下文已按预算截断。");
-    if (resp.data?.status === "SERVICE_ERROR" && $("question"))
-      $("question").value = q;
-  } catch (err) {
-    if (progress) progress.textContent = err.message;
-    throw err;
-  } finally {
-    state.pending = false;
-    if (send) send.disabled = false;
-  }
-}
 window.addEventListener("hashchange", () => {
   if (state.me) navigate(location.hash.slice(1));
 });
 (async () => {
   try {
     state.me = await get("/me");
+    const entry = history.state;
+    if (location.hash === "#ask" && entry?.user === state.me.user_id && entry.role === state.me.role_code)
+      selectChat(entry.sid, "", entry.request);
     await navigate(location.hash.slice(1) || "ask");
   } catch {
     loginScreen();
