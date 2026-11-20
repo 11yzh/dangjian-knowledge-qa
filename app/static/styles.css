@@ -7,6 +7,8 @@
   --line: #dedbd2;
   --paper: #faf9f5;
   --gray: #eeede6;
+  --field-surface: #fffefa;
+  --field-border: #c5bcad;
   --green: #316452;
   --serif: "STZhongsong", "Songti SC", "SimSun", serif;
   --sans: "Microsoft YaHei UI", "PingFang SC", "Microsoft YaHei", sans-serif;
@@ -62,6 +64,101 @@ textarea,
 select {
   padding: 10px 12px;
   max-width: 100%;
+}
+input:not([type="checkbox"], [type="radio"], [type="file"]),
+textarea,
+select {
+  border-color: var(--field-border);
+  border-radius: 8px;
+  background-color: var(--field-surface);
+  caret-color: var(--wine);
+}
+:where(input, textarea)::placeholder {
+  color: #706e67;
+  opacity: 1;
+}
+:where(input, textarea, select):where(:enabled):hover {
+  border-color: #9b8c7e;
+}
+:where(input, textarea, select):focus-visible {
+  outline: 2px solid var(--wine);
+  outline-offset: 2px;
+}
+select {
+  cursor: pointer;
+  -webkit-tap-highlight-color: #762c351a;
+}
+@supports (appearance: base-select) and selector(select::picker(select)) {
+  select,
+  select::picker(select) {
+    appearance: base-select;
+  }
+  select {
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.8em;
+  }
+  select::picker-icon {
+    content: "";
+    width: 0.48em;
+    height: 0.48em;
+    flex: none;
+    align-self: center;
+    margin: -0.2em 0.2em 0;
+    border: solid currentColor;
+    border-width: 0 1.5px 1.5px 0;
+    rotate: 45deg;
+  }
+  select:open {
+    border-color: var(--wine);
+  }
+  select:open::picker-icon {
+    color: var(--wine);
+    margin-block: 0.2em 0;
+    rotate: 225deg;
+  }
+  select::picker(select) {
+    min-inline-size: min(calc(100vw - 1.5rem), max(9.5rem, anchor-size(width)));
+    max-block-size: min(18rem, 50dvh);
+    max-inline-size: calc(100vw - 1.5rem);
+    margin-block: 4px;
+    padding: 4px;
+    border: 1px solid var(--field-border);
+    border-radius: 10px;
+    background: var(--field-surface);
+    color: var(--ink);
+    box-shadow: 0 6px 22px #41312624;
+    position-try-order: normal;
+    overscroll-behavior: contain;
+  }
+  select option {
+    align-items: center;
+    gap: 12px;
+    min-block-size: 36px;
+    padding: 7px 10px;
+    border-radius: 6px;
+    line-height: 1.45;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    cursor: pointer;
+  }
+  select option:hover {
+    background: var(--gray);
+  }
+  select option:checked {
+    background: var(--rose);
+    color: var(--wine-dark);
+    font-weight: 600;
+  }
+  select option::checkmark {
+    order: 1;
+    margin-inline-start: auto;
+    color: var(--wine);
+  }
+  select option:focus-visible {
+    outline: 2px solid var(--wine);
+    outline-offset: -2px;
+  }
 }
 textarea {
   resize: vertical;
@@ -367,23 +464,48 @@ small {
   background: #fffefa;
 }
 .composer {
-  background: white;
-  border: 1px solid #bcb2a6;
-  border-radius: 10px;
-  padding: 13px 15px;
+  --inset: clamp(12px, 1.5vw, 20px);
+  background: var(--field-surface);
+  border: 1px solid var(--field-border);
+  border-radius: 14px;
+  box-shadow: 0 3px 12px #3f302410;
   margin: 20px 0;
 }
-.composer:focus-within {
+.chat-home + .composer {
+  margin-top: 8px;
+}
+.composer:has(textarea:focus-visible) {
   border-color: var(--wine);
-  box-shadow: 0 0 0 2px #762c3512;
+  outline: 2px solid transparent;
+  outline-offset: 1px;
+  box-shadow: 0 0 0 3px #762c351c;
 }
 .composer textarea {
+  display: block;
   width: 100%;
   border: 0;
+  border-radius: 13px 13px 0 0;
+  background: transparent;
+  min-height: 88px;
+  max-height: min(15rem, 42vh);
+  padding: 15px var(--inset) 12px;
+  font-size: 16px;
+  line-height: 1.65;
+}
+.composer:has(textarea:focus-visible) textarea {
   outline: none;
-  resize: vertical;
-  min-height: 72px;
-  padding: 4px;
+}
+@supports (field-sizing: content) {
+  .composer textarea {
+    field-sizing: content;
+    resize: none;
+  }
+}
+#chat-progress {
+  margin: 0;
+}
+#chat-progress:not(:empty) {
+  padding: 0 var(--inset) 10px;
 }
 .actions,
 .controls,
@@ -396,16 +518,47 @@ small {
 }
 .controls {
   justify-content: space-between;
+  padding: 10px var(--inset);
+  border-top: 1px solid #e5dfd3;
+  border-radius: 0 0 13px 13px;
+  background: #f6f4ed;
+}
+.controls .actions {
+  min-width: 0;
+  gap: 14px;
+}
+.controls select {
+  min-width: 7.25em;
+  max-width: min(17em, 100%);
+  padding: 7px 11px;
+  font-size: 14px;
 }
 .controls label {
+  min-height: 38px;
   font-size: 13px;
   color: var(--muted);
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 7px;
+  cursor: pointer;
 }
 .controls input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
   accent-color: var(--wine);
+  cursor: pointer;
+}
+.composer-submit {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-inline-start: auto;
+}
+.composer-submit button {
+  min-height: 38px;
+  padding: 6px 17px;
+  border-radius: 8px;
 }
 .messages {
   display: grid;
@@ -771,11 +924,11 @@ td {
   .featured .thumb {
     width: 65px;
   }
-  .controls {
-    align-items: flex-end;
+  .controls .actions {
+    gap: 10px;
   }
-  .controls select {
-    max-width: 125px;
+  .composer-shortcut {
+    display: none;
   }
   .record {
     gap: 7px;
@@ -793,9 +946,29 @@ td {
     padding: 17px;
   }
 }
+@media (max-width: 359px) {
+  .composer-submit,
+  .composer-submit button {
+    width: 100%;
+  }
+}
+@media (pointer: coarse) {
+  .composer-shortcut {
+    display: none;
+  }
+  .controls :is(select, label, button),
+  select option {
+    min-height: 44px;
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   * {
     scroll-behavior: auto !important;
+  }
+}
+@media (forced-colors: active) {
+  .composer:has(textarea:focus-visible) {
+    outline-color: Highlight;
   }
 }
 @media (min-width: 801px) {

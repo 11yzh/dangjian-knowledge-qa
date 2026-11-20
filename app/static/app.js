@@ -580,7 +580,22 @@ async function chatView() {
     (!state.history.length
       ? `<div class="chat-home"><h2>今天想了解哪条规定？</h2><p>输入问题后，可从答复中的引用查看对应条文。</p><div class="featured"><div><small>收录原文</small><b>中国共产党章程</b><small>共产党员网 · 2022 年 10 月 22 日通过</small></div><img class="thumb" src="/static/constitution-page.webp" alt="中国共产党章程原文首页"></div><div class="topic-list">${faqs.map((f) => act(f.title, () => startQuestion(f.question, f.faq_id))).join("")}</div></div>`
       : `<div class="messages">${state.history.map(message).join("")}</div>`) +
-    `<form id="composer" class="composer"><textarea id="question" aria-label="输入问题" maxlength="2000" placeholder="输入问题，例如：预备党员的预备期为多长时间？" required>${esc(state.retry?.question || "")}</textarea><div class="controls"><div class="actions"><select aria-label="限定资料分类" id="chat-cat"><option value="">全部分类</option>${options(filters.categories, "category_id", "name", "")}</select><label><input id="reset-topic" type="checkbox">切换话题</label></div><button type="submit" class="primary" id="send">发送问题</button></div><div id="chat-progress" class="help" role="status"></div></form>`
+    `<form id="composer" class="composer">
+      <textarea id="question" aria-label="输入问题" aria-keyshortcuts="Control+Enter" rows="2" maxlength="2000" placeholder="输入问题，例如：预备党员的预备期为多长时间？" required>${esc(state.retry?.question || "")}</textarea>
+      <div id="chat-progress" class="help" role="status"></div>
+      <div class="controls">
+        <div class="actions">
+          <select aria-label="限定资料分类" id="chat-cat">
+            <option value="">全部分类</option>${options(filters.categories, "category_id", "name", "")}
+          </select>
+          <label><input id="reset-topic" type="checkbox">切换话题</label>
+        </div>
+        <div class="composer-submit">
+          <small class="composer-shortcut">Ctrl + Enter</small>
+          <button type="submit" class="primary" id="send">发送问题</button>
+        </div>
+      </div>
+    </form>`
   );
 }
 function bindComposer() {
